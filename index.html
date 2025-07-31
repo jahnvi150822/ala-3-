@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CryptoLock</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --rose: #b76e79;
+      --rose-dark: #9c5c65;
+      --rose-light: #f7e6dc;
+      --text: #4e2a2a;
+      --error: #d9534f;
+      --bg-blur: rgba(255, 245, 242, 0.85);
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: linear-gradient(to bottom right, var(--rose-light), #f2cfc9);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 15px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-blur);
+      border-radius: 20px;
+      box-shadow: 0 8px 30px rgba(183, 110, 121, 0.2);
+      padding: 24px;
+      backdrop-filter: blur(8px);
+      border: 1px solid #ffe0e5;
+    }
+
+    h1, h2 {
+      color: var(--rose-dark);
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      margin-top: 10px;
+      border: 1.8px solid var(--rose);
+      border-radius: 10px;
+      background: #fffafa;
+      color: var(--text);
+      font-size: 1rem;
+      resize: vertical;
+    }
+
+    textarea[readonly] {
+      background: #fbeeee;
+    }
+
+    .btn {
+      display: inline-block;
+      background: var(--rose);
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-weight: bold;
+      margin-top: 16px;
+      cursor: pointer;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    .btn:hover {
+      background: var(--rose-dark);
+      transform: scale(1.02);
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .error {
+      color: var(--error);
+      text-align: center;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    label {
+      font-size: 0.9rem;
+      color: var(--text);
+      margin-top: 12px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="login">
+    <h1>🔐 CryptoLock</h1>
+    <input type="password" id="password" placeholder="Enter password" />
+    <div id="login-error" class="error"></div>
+    <div class="row">
+      <button class="btn" onclick="login()">Login</button>
+    </div>
+  </div>
+
+  <div class="container hidden" id="encrypt">
+    <h2>🛡 Encrypt / Decrypt</h2>
+    <label>Message</label>
+    <textarea id="message" rows="3" placeholder="Enter message..."></textarea>
+
+    <label>Encrypted (Base64)</label>
+    <textarea id="encrypted" rows="2" readonly></textarea>
+
+    <div class="row">
+      <button class="btn" onclick="encrypt()">Encrypt</button>
+      <button class="btn" onclick="decrypt()">Decrypt</button>
+    </div>
+
+    <label>Decrypted</label>
+    <textarea id="decrypted" rows="2" readonly></textarea>
+
+    <div id="msg-error" class="error"></div>
+
+    <div class="row">
+      <button class="btn" onclick="showKey()">🔑 Key</button>
+      <button class="btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container hidden" id="key">
+    <h2>🔑 AES Key Generator</h2>
+    <div class="row">
+      <button class="btn" onclick="generateKey()">Generate Key</button>
+    </div>
+    <textarea id="key-output" rows="2" readonly style="margin-top: 14px;">No key generated.</textarea>
+    <div class="row">
+      <button class="btn" onclick="back()">⬅ Back</button>
+      <button class="btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <script>
+    const correctPassword = "shuche";
+    let aesKey = null;
+
+    function show(id) {
+      ['login', 'encrypt', 'key'].forEach(s => {
+        document.getElementById(s).classList.add('hidden');
+      });
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    async function login() {
+      const pass = document.getElementById("password").value.trim();
+      const err = document.getElementById("login-error");
+      err.textContent = "";
+      if (!pass) return err.textContent = "Enter password.";
+      if (pass !== correctPassword) return err.textContent = "Wrong password.";
+      aesKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+      show('encrypt');
+    }
+
+    async function encrypt() {
+      const msg = document.getElementById("message").value.trim();
+      const err = document.getElementById("msg-error");
+      err.textContent = "";
+      if (!aesKey) return err.textContent = "Generate key first.";
+      if (!msg) return err.textContent = "Enter a message.";
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encoded = new TextEncoder().encode(msg);
+      const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoded);
+      const result = new Uint8Array(iv.length + encrypted.byteLength);
+      result.set(iv, 0);
+      result.set(new Uint8Array(encrypted), iv.length);
+      document.getElementById("encrypted").value = btoa(String.fromCharCode(...result));
+      document.getElementById("decrypted").value = "";
+    }
+
+    async function decrypt() {
+      const input = document.getElementById("encrypted").value.trim();
+      const err = document.getElementById("msg-error");
+      err.textContent = "";
+      if (!aesKey) return err.textContent = "Generate key first.";
+      if (!input) return err.textContent = "Paste encrypted message.";
+      const bytes = Uint8Array.from(atob(input), c => c.charCodeAt(0));
+      const iv = bytes.slice(0, 12);
+      const data = bytes.slice(12);
+      try {
+        const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, data);
+        document.getElementById("decrypted").value = new TextDecoder().decode(decrypted);
+      } catch (e) {
+        err.textContent = "Decryption failed.";
+      }
+    }
+
+    async function generateKey() {
+      aesKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+      const raw = await crypto.subtle.exportKey("raw", aesKey);
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(raw)));
+      document.getElementById("key-output").value = base64;
+    }
+
+    function logout() {
+      aesKey = null;
+      ['password', 'message', 'encrypted', 'decrypted', 'key-output'].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+      show('login');
+    }
+
+    function showKey() {
+      show('key');
+    }
+
+    function back() {
+      show('encrypt');
+    }
+  </script>
+</body>
+</html>
